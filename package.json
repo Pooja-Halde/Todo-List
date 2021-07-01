@@ -1,0 +1,30 @@
+{
+  "name": "Todo_List",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" ",
+    "build": "webpack --progress --mode=production",
+    "watch": "webpack --progress --watch",
+    "start": "webpack serve --open"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pooja-Halde/Todo-List.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Pooja-Halde/Todo-List/issues"
+  },
+  "homepage": "https://github.com/Pooja-Halde/Todo-List#readme",
+  "dependencies": {
+    "date-fns": "^2.22.1",
+    "express": "^4.17.1"
+  },
+  "devDependencies": {
+    "webpack": "^5.41.1",
+    "webpack-cli": "^4.7.2"
+  }
+}
