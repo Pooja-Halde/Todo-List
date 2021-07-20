@@ -1,528 +1,463 @@
-import { format } from 'date-fns';
-import Storage from './Storage';
-import Project from './Project';
-import Task from './Task';
+import Storage from './Storage'
+import Task from './Task'
+import { performUIEffects } from './UIEffects'
+import { isPast, differenceInDays } from 'date-fns'
 
 export default class UI {
-  // LOADING CONTENT
-
-  static loadHomepage() {
-    UI.loadProjects();
-    UI.initProjectButtons();
-    UI.openProject('Inbox', document.getElementById('button-inbox-projects'));
-    document.addEventListener('keydown', UI.handleKeyboard);
+  static loadHomePage() {
+    performUIEffects()
+    UI.initDefaultProjects()
+    UI.loadProjects()
+    UI.initSubmitAddProject()
+    UI.initSubmitEditTask()
   }
-
-  static loadProjects() {
-    Storage.getTodoList()
-      .getProjects()
-      .forEach((project) => {
-        if (
-          project.name !== 'Inbox' &&
-          project.name !== 'Today' &&
-          project.name !== 'This week'
-        ) {
-          UI.createProject(project.name);
+  static initDefaultProjects() {
+    const defaultProjects = document.querySelectorAll('[default-project]')
+    defaultProjects.forEach(project => {
+      project.addEventListener('click', () => {
+        const defaultProjectName = project.querySelector('span').innerText
+        switch (defaultProjectName) {
+          case 'All':
+            UI.loadProject('All')
+            break
+          case 'Today':
+            UI.loadProject('Today')
+            break
+          case 'This Week':
+            UI.loadProject('This Week')
+            break
         }
-      });
-
-    UI.initAddProjectButtons();
+      })
+    })
+  }
+  static loadProjects() {
+    UI.clearAllProjects()
+    const todoList = Storage.getTodoList()
+    todoList.getProjects().forEach(project => {
+      if (
+        project.getName() === 'All' ||
+        project.getName() === 'Today' ||
+        project.getName() === 'This Week'
+      )
+        return
+      UI.addProjectToUI(project.getName())
+    })
+    UI.initAllButtonProjects()
+  }
+  static clearAllProjects() {
+    const projectList = document.querySelector('[project-list]')
+    projectList.innerHTML = ``
   }
 
-  static loadTasks(projectName) {
-    Storage.getTodoList()
-      .getProject(projectName)
-      .getTasks()
-      .forEach((task) => UI.createTask(task.name, task.dueDate));
+  // init submit project START
+  static initSubmitAddProject() {
+    document
+      .querySelector('[submit-add-project]')
+      .addEventListener('submit', this.addProject)
+  }
+  static addProject(e) {
+    e.preventDefault()
+    const newProjectName = document.querySelector('[input-project-name]').value
 
-    if (projectName !== 'Today' && projectName !== 'This week') {
-      UI.initAddTaskButtons();
+    if (!UI.projectNameAlreadyExists(newProjectName)) {
+      Storage.addProject(newProjectName)
+      UI.addProjectToUI(newProjectName)
+      UI.initAllButtonProjects()
+      UI.clearAddProjectInput()
+      document.querySelector('[button-cancel-project]').click()
     }
+    UI.initButtonProject(newProjectName).click()
   }
-
-  static loadProjectContent(projectName) {
-    const projectPreview = document.getElementById('project-preview');
-    projectPreview.innerHTML = `
-        <h1 id="project-name">${projectName}</h1>
-        <div class="tasks-list" id="tasks-list"></div>`;
-
-    if (projectName !== 'Today' && projectName !== 'This week') {
-      projectPreview.innerHTML += `
-        <button class="button-add-task" id="button-add-task">
-          <i class="fas fa-plus"></i>
-          Add Task
-        </button>
-        <div class="add-task-popup" id="add-task-popup">
-          <input
-            class="input-add-task-popup"
-            id="input-add-task-popup"
-            type="text"
-          />
-          <div class="add-task-popup-buttons">
-            <button class="button-add-task-popup" id="button-add-task-popup">
-              Add
-            </button>
-            <button
-              class="button-cancel-task-popup"
-              id="button-cancel-task-popup"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>`;
-    }
-
-    UI.loadTasks(projectName);
+  static addProjectToUI(projectName) {
+    const projectList = document.querySelector('[project-list]')
+    projectList.innerHTML += `
+            <div class="task-view-as" project><i class="fas fa-tasks me-3"></i><span>${projectName}</span></div>`
+    UI.closeNavInSmallDevices()
   }
+  // init submit project END
 
-  // CREATING CONTENT
-
-  static createProject(name) {
-    const userProjects = document.getElementById('projects-list');
-    userProjects.innerHTML += ` 
-      <button class="button-project" data-project-button>
-        <div class="left-project-panel">
-          <i class="fas fa-tasks"></i>
-          <span>${name}</span>
-        </div>
-        <div class="right-project-panel">
-          <i class="fas fa-times"></i>
-        </div>
-      </button>`;
-
-    UI.initProjectButtons();
+  static initAllButtonProjects() {
+    document.querySelectorAll('[project]').forEach(project => {
+      const projectName = project.querySelector('span').innerText
+      UI.initButtonProject(projectName)
+    })
   }
+  static initButtonProject(projectName) {
+    const projects = Array.from(document.querySelectorAll('[project]'))
+    const project = projects.find(
+      project => project.querySelector('span').innerText === projectName
+    )
 
-  static createTask(name, dueDate) {
-    const tasksList = document.getElementById('tasks-list');
-    tasksList.innerHTML += `
-      <button class="button-task" data-task-button>
-        <div class="left-task-panel">
-          <i class="far fa-circle"></i>
-          <p class="task-content">${name}</p>
-          <input type="text" class="input-task-name" data-input-task-name>
-        </div>
-        <div class="right-task-panel">
-          <p class="due-date" id="due-date">${dueDate}</p>
-          <input type="date" class="input-due-date" data-input-due-date>
-          <i class="fas fa-times"></i>
-        </div>
-      </button>`;
-
-    UI.initTaskButtons();
+    project.addEventListener('click', () => {
+      UI.loadProject(projectName)
+    })
+    return project
   }
-
-  static clear() {
-    UI.clearProjectPreview();
-    UI.clearProjects();
-    UI.clearTasks();
-  }
-
-  static clearProjectPreview() {
-    const projectPreview = document.getElementById('project-preview');
-    projectPreview.textContent = '';
-  }
-
-  static clearProjects() {
-    const projectsList = document.getElementById('projects-list');
-    projectsList.textContent = '';
-  }
-
-  static clearTasks() {
-    const tasksList = document.getElementById('tasks-list');
-    tasksList.textContent = '';
-  }
-
-  static closeAllPopups() {
-    UI.closeAddProjectPopup();
-    if (document.getElementById('button-add-task')) {
-      UI.closeAddTaskPopup();
-    }
+  static loadProject(projectName) {
+    UI.loadProjectPageContentToUI(projectName)
+    UI.addActiveStyle(projectName)
+    UI.initSubmitAddNewTask()
     if (
-      document.getElementById('tasks-list') &&
-      document.getElementById('tasks-list').innerHTML !== ''
+      projectName !== 'All' &&
+      projectName !== 'Today' &&
+      projectName !== 'This Week'
+    )
+      UI.initDeleteProjectButton()
+    UI.initSortButton()
+    UI.addAllTasksOfThisProjectToUI()
+
+    UI.closeNavInSmallDevices()
+  }
+  static projectNameAlreadyExists(projectName) {
+    const todoList = Storage.getTodoList()
+    if (
+      todoList
+        .getProjects()
+        .some(
+          project =>
+            project.getName().toLowerCase() === projectName.toLowerCase()
+        )
     ) {
-      UI.closeAllInputs();
+      alert('Project Name Already Exists.')
+      return true
+    }
+    return false
+  }
+  static loadProjectPageContentToUI(projectName) {
+    const projectContentPage = document.querySelector('.content')
+    let addTaskInnerHTML = `
+        <div class="add-task mb-2" data-bs-toggle="modal" data-bs-target="#add-task" button-add-new-task><i class="fas fa-plus me-3"><span>New Task</span></i></div>
+        `
+    if (projectName === 'Today' || projectName === 'This Week')
+      addTaskInnerHTML = ''
+    let deleteButton = `
+        <i class="delete-project-button fas fa-times" title="Delete Project" button-delete-project></i>`
+    if (
+      projectName === 'All' ||
+      projectName === 'Today' ||
+      projectName === 'This Week'
+    )
+      deleteButton = ''
+    projectContentPage.innerHTML = ''
+    projectContentPage.innerHTML += `
+            <div class="view-as d-flex justify-content-between">
+                <span project-name>${projectName}</span>
+                <div class="dropstart">
+                    <button type="button" class="btn dropdown-toggle shadow-none " data-bs-toggle="dropdown"><span></span>: <em class="me-1" sort-by>${Storage.getFilterOfProject(
+                      projectName
+                    )}</em></button>
+                  
+                </div>
+            </div>
+            ${addTaskInnerHTML}
+            <div class="task-list">
+            </div>
+            ${deleteButton}
+        `
+    UI.sortSelectEffect()
+  }
+  static addActiveStyle(projectName) {
+    const projects = document.querySelectorAll('[project]')
+    const defaultProjects = document.querySelectorAll('[default-project]')
+    projects.forEach(project => project.classList.remove('active'))
+    defaultProjects.forEach(project => project.classList.remove('active'))
+
+    if (
+      projectName === 'All' ||
+      projectName === 'Today' ||
+      projectName === 'This Week'
+    )
+      addActiveStyleTo(defaultProjects)
+    else addActiveStyleTo(projects)
+
+    function addActiveStyleTo(thisOne) {
+      thisOne.forEach(project => {
+        if (project.querySelector('span').innerText === projectName) {
+          project.classList.add('active')
+        }
+      })
     }
   }
-
-  static closeAllInputs() {
-    const taskButtons = document.querySelectorAll('[data-task-button]');
-
-    taskButtons.forEach((button) => {
-      UI.closeRenameInput(button);
-      UI.closeSetDateInput(button);
-    });
+  static initSubmitAddNewTask() {
+    const addNewTaskSubmit = document.querySelector('[submit-add-new-task]')
+    addNewTaskSubmit.addEventListener('submit', this.addOneTask)
   }
 
-  static handleKeyboard(e) {
-    if (e.key === 'Escape') UI.closeAllPopups();
+  // init Sort Tasks
+  static initSortButton() {
+    const items = document.querySelectorAll('[data-sort]')
+    items.forEach(item => item.addEventListener('click', UI.filterTasks))
+  }
+  static filterTasks() {
+    const filterBy = this.innerText
+    Storage.changeProjectTaskFilter(UI.getCurrentProjectName(), filterBy)
+    UI.addAllTasksOfThisProjectToUI()
   }
 
-  // PROJECT ADD EVENT LISTENERS
-
-  static initAddProjectButtons() {
-    const addProjectButton = document.getElementById('button-add-project');
-    const addProjectPopupButton = document.getElementById(
-      'button-add-project-popup',
-    );
-    const cancelProjectPopupButton = document.getElementById(
-      'button-cancel-project-popup',
-    );
-    const addProjectPopupInput = document.getElementById(
-      'input-add-project-popup',
-    );
-
-    addProjectButton.addEventListener('click', UI.openAddProjectPopup);
-    addProjectPopupButton.addEventListener('click', UI.addProject);
-    cancelProjectPopupButton.addEventListener('click', UI.closeAddProjectPopup);
-    addProjectPopupInput.addEventListener(
-      'keypress',
-      UI.handleAddProjectPopupInput,
-    );
+  // delete Project
+  static initDeleteProjectButton() {
+    const buttonDeleteProject = document.querySelector(
+      '[button-delete-project]'
+    )
+    buttonDeleteProject.addEventListener('click', this.deleteThisProject)
   }
-
-  static openAddProjectPopup() {
-    const addProjectPopup = document.getElementById('add-project-popup');
-    const addProjectButton = document.getElementById('button-add-project');
-
-    UI.closeAllPopups();
-    addProjectPopup.classList.add('active');
-    addProjectButton.classList.add('active');
+  static deleteThisProject() {
+    const projectName = document.querySelector('[project-name]').innerText
+    Storage.deleteProject(projectName)
+    UI.clearProjectUIContent()
+    UI.loadProjects()
   }
-
-  static closeAddProjectPopup() {
-    const addProjectPopup = document.getElementById('add-project-popup');
-    const addProjectButton = document.getElementById('button-add-project');
-    const addProjectPopupInput = document.getElementById(
-      'input-add-project-popup',
-    );
-
-    addProjectPopup.classList.remove('active');
-    addProjectButton.classList.remove('active');
-    addProjectPopupInput.value = '';
+  static clearProjectUIContent() {
+    const projectContentPage = document.querySelector('.content')
+    projectContentPage.innerHTML = ''
+    UI.closeNavInSmallDevices()
   }
+  // delete Project END
 
-  static addProject() {
-    const addProjectPopupInput = document.getElementById(
-      'input-add-project-popup',
-    );
-    const projectName = addProjectPopupInput.value;
+  static addAllTasksOfThisProjectToUI() {
+    const projectName = UI.getCurrentProjectName()
+    let tasks = Storage.getTasksFromOneProject(projectName)
 
-    if (projectName === '') {
-      alert("Project name can't be empty");
-      return;
-    }
+    if (
+      projectName === 'All' ||
+      projectName === 'Today' ||
+      projectName === 'This Week'
+    )
+      tasks = Storage.getDefaultTasks(projectName)
 
-    if (Storage.getTodoList().contains(projectName)) {
-      addProjectPopupInput.value = '';
-      alert('Project names must be different');
-      return;
-    }
+    if (Storage.getFilterOfProject(projectName) === 'incomplete')
+      tasks = tasks.filter(task => task.getDone() === false)
 
-    Storage.addProject(new Project(projectName));
-    UI.createProject(projectName);
-    UI.closeAddProjectPopup();
+    document.querySelector('.task-list').innerHTML = ''
+    tasks.forEach(task => {
+      document.querySelector('.task-list').innerHTML += `
+        <div TASK${task.getIDForTask()}>
+            <div class="task">
+                <div class="first-group">
+                    <input class="form-check-input shadow-none me-3" type="checkbox"  ${task.getDoneCheckboxState()} done-checkbox="${task.getProjectName()}"/>
+                    <span>${task.getName()}</span>
+                </div>
+                <div class="second-group">
+                    <i class="icon fas fa-${task.getIconPriority()}"></i>
+                    <button type="button" class="details btn btn-secondary shadow-none" data-bs-toggle="collapse" data-bs-target="#_${task.getIDForTask()}">Details</button>
+                    <span class="date">${task.getDateFormatted()}</span>
+                    <i class="fas fa-edit edit" data-bs-toggle="modal" title="edit" data-bs-target="#edit-task" edit-button="${task.getName()}"></i>
+                    <i class="fas fa-trash-alt delete" delete-task="${task.getIDForTask()}" title="delete"></i>
+                </div>
+            </div>
+            <div class="collapse" id="_${task.getIDForTask()}">
+                <div class="card card-body rounded-0 border-top-0 border-bottom-0 pt-2 pb-0" style="background-color: oldlace;">
+                ${
+                  projectName === 'All' ||
+                  projectName === 'Today' ||
+                  projectName === 'This Week'
+                    ? `<p class="mb-0"><b>Project: </b><span>${task.getProjectName()}</span></p>`
+                    : ''
+                }
+                    <p class="mb-0"><b>Date: </b><span class="date">${task.getDateFormatted()}</span></p>
+                    <p class="mb-0"><b>Priority: </b>${task.getPriority()} <i class="icon fas fa-${task.getIconPriority()}"></i></p>
+                    <p class="mb-0">
+                        <b>Description: </b>${task.getDescript()}
+                    </p>
+                </div>
+            </div>
+        </div>`
+      UI.isPastEffect(task)
+      UI.addDoneEffect(task)
+    })
+    UI.initAllCheckBoxes()
+    UI.initAllEditButtons()
+    UI.initAllDeleteButtons()
   }
-
-  static handleAddProjectPopupInput(e) {
-    if (e.key === 'Enter') UI.addProject();
+  // done Checkbox
+  static addDoneEffect(task) {
+    const TASK = document.querySelector(`[TASK${task.getIDForTask()}]`)
+    const icons = TASK.querySelectorAll(`i.icon`)
+    
   }
-
-  // PROJECT EVENT LISTENERS
-
-  static initProjectButtons() {
-    const inboxProjectsButton = document.getElementById(
-      'button-inbox-projects',
-    );
-    const todayProjectsButton = document.getElementById(
-      'button-today-projects',
-    );
-    const weekProjectsButton = document.getElementById('button-week-projects');
-    const projectButtons = document.querySelectorAll('[data-project-button]');
-    const openNavButton = document.getElementById('button-open-nav');
-
-    inboxProjectsButton.addEventListener('click', UI.openInboxTasks);
-    todayProjectsButton.addEventListener('click', UI.openTodayTasks);
-    weekProjectsButton.addEventListener('click', UI.openWeekTasks);
-    projectButtons.forEach((projectButton) =>
-      projectButton.addEventListener('click', UI.handleProjectButton),
-    );
-    openNavButton.addEventListener('click', UI.openNav);
+  static initAllCheckBoxes() {
+    const checkboxes = document.querySelectorAll('[done-checkbox]')
+    checkboxes.forEach(checkbox =>
+      checkbox.addEventListener('change', this.switchDoneStatus)
+    )
   }
-
-  static openInboxTasks() {
-    UI.openProject('Inbox', this);
+  static switchDoneStatus() {
+    this.checked
+      ? this.removeAttribute('checked')
+      : this.setAttribute('checked', '')
+    UI.addDoneEffectAll(this)
   }
-
-  static openTodayTasks() {
-    Storage.updateTodayProject();
-    UI.openProject('Today', this);
+  static addDoneEffectAll(box) {
+    const taskName = box.nextElementSibling.innerText
+    const todoList = Storage.getTodoList()
+    const task = todoList
+      .getProject(box.getAttribute('done-checkbox'))
+      .getTask(taskName)
+    task.switchDoneValue()
+    // UI.addDoneEffect(task);
+    Storage.saveTodoList(todoList)
+    UI.addAllTasksOfThisProjectToUI()
   }
-
-  static openWeekTasks() {
-    Storage.updateWeekProject();
-    UI.openProject('This week', this);
+  // edit
+  static initAllEditButtons() {
+    const buttonsEditTask = document.querySelectorAll('[edit-button]')
+    buttonsEditTask.forEach(button =>
+      button.addEventListener('click', UI.openEditTask)
+    )
   }
-
-  static handleProjectButton(e) {
-    const projectName = this.children[0].children[1].textContent;
-
-    if (e.target.classList.contains('fa-times')) {
-      UI.deleteProject(projectName, this);
-      return;
-    }
-
-    UI.openProject(projectName, this);
+  static taskNameBeingEdited = ''
+  static openEditTask() {
+    const taskName = this.getAttribute('edit-button')
+    ;(function prepopulateEditTask() {
+      const todoList = Storage.getTodoList()
+      const task = todoList.getTask(taskName)
+      document.querySelector('[edit-task-project-name]').innerText =
+        task.getProjectName()
+      document.querySelector('[edit-task-name]').value = task.getName()
+      document.querySelector('[edit-task-descript]').value = task.getDescript()
+      document.querySelector('[edit-task-priority]').value = task.getPriority()
+      document.querySelector('[edit-task-date]').value = task.getDate()
+    })()
+    UI.taskNameBeingEdited = taskName
   }
-
-  static openProject(projectName, projectButton) {
-    const defaultProjectButtons = document.querySelectorAll(
-      '.button-default-project',
-    );
-    const projectButtons = document.querySelectorAll('.button-project');
-    const buttons = [...defaultProjectButtons, ...projectButtons];
-
-    buttons.forEach((button) => button.classList.remove('active'));
-    projectButton.classList.add('active');
-    UI.closeAddProjectPopup();
-    UI.loadProjectContent(projectName);
+  static initSubmitEditTask() {
+    document
+      .querySelector('[submit-edit-task]')
+      .addEventListener('submit', e => {
+        e.preventDefault()
+        UI.updateTask(UI.taskNameBeingEdited)
+      })
   }
+  static updateTask(taskName) {
+    if (!UI.taskNameAlreadyExists(true, taskName)) {
+      const todoList = Storage.getTodoList()
+      const task = todoList.getTask(taskName)
 
-  static deleteProject(projectName, button) {
-    if (button.classList.contains('active')) UI.clearProjectPreview();
-    Storage.deleteProject(projectName);
-    UI.clearProjects();
-    UI.loadProjects();
-  }
+      task.setName(document.querySelector('[edit-task-name]').value)
+      task.setDescript(document.querySelector('[edit-task-descript]').value)
+      task.setPriority(document.querySelector('[edit-task-priority]').value)
+      task.setDate(document.querySelector('[edit-task-date]').value)
 
-  static openNav() {
-    const nav = document.getElementById('nav');
-
-    UI.closeAllPopups();
-    nav.classList.toggle('active');
-  }
-
-  // ADD TASK EVENT LISTENERS
-
-  static initAddTaskButtons() {
-    const addTaskButton = document.getElementById('button-add-task');
-    const addTaskPopupButton = document.getElementById('button-add-task-popup');
-    const cancelTaskPopupButton = document.getElementById(
-      'button-cancel-task-popup',
-    );
-    const addTaskPopupInput = document.getElementById('input-add-task-popup');
-
-    addTaskButton.addEventListener('click', UI.openAddTaskPopup);
-    addTaskPopupButton.addEventListener('click', UI.addTask);
-    cancelTaskPopupButton.addEventListener('click', UI.closeAddTaskPopup);
-    addTaskPopupInput.addEventListener('keypress', UI.handleAddTaskPopupInput);
-  }
-
-  static openAddTaskPopup() {
-    const addTaskPopup = document.getElementById('add-task-popup');
-    const addTaskButton = document.getElementById('button-add-task');
-
-    UI.closeAllPopups();
-    addTaskPopup.classList.add('active');
-    addTaskButton.classList.add('active');
-  }
-
-  static closeAddTaskPopup() {
-    const addTaskPopup = document.getElementById('add-task-popup');
-    const addTaskButton = document.getElementById('button-add-task');
-    const addTaskInput = document.getElementById('input-add-task-popup');
-
-    addTaskPopup.classList.remove('active');
-    addTaskButton.classList.remove('active');
-    addTaskInput.value = '';
-  }
-
-  static addTask() {
-    const projectName = document.getElementById('project-name').textContent;
-    const addTaskPopupInput = document.getElementById('input-add-task-popup');
-    const taskName = addTaskPopupInput.value;
-
-    if (taskName === '') {
-      alert("Task name can't be empty");
-      return;
-    }
-    if (Storage.getTodoList().getProject(projectName).contains(taskName)) {
-      alert('Task names must be different');
-      addTaskPopupInput.value = '';
-      return;
-    }
-
-    Storage.addTask(projectName, new Task(taskName));
-    UI.createTask(taskName, 'No date');
-    UI.closeAddTaskPopup();
-  }
-
-  static handleAddTaskPopupInput(e) {
-    if (e.key === 'Enter') UI.addTask();
-  }
-
-  // TASK EVENT LISTENERS
-
-  static initTaskButtons() {
-    const taskButtons = document.querySelectorAll('[data-task-button]');
-    const taskNameInputs = document.querySelectorAll('[data-input-task-name');
-    const dueDateInputs = document.querySelectorAll('[data-input-due-date');
-
-    taskButtons.forEach((taskButton) =>
-      taskButton.addEventListener('click', UI.handleTaskButton),
-    );
-    taskNameInputs.forEach((taskNameInput) =>
-      taskNameInput.addEventListener('keypress', UI.renameTask),
-    );
-    dueDateInputs.forEach((dueDateInput) =>
-      dueDateInput.addEventListener('change', UI.setTaskDate),
-    );
-  }
-
-  static handleTaskButton(e) {
-    if (e.target.classList.contains('fa-circle')) {
-      UI.setTaskCompleted(this);
-      return;
-    }
-    if (e.target.classList.contains('fa-times')) {
-      UI.deleteTask(this);
-      return;
-    }
-    if (e.target.classList.contains('task-content')) {
-      UI.openRenameInput(this);
-      return;
-    }
-    if (e.target.classList.contains('due-date')) {
-      UI.openSetDateInput(this);
+      Storage.saveTodoList(todoList)
+      document.querySelector('[button-cancel-edit-task]').click()
+      UI.addAllTasksOfThisProjectToUI()
     }
   }
+  static saveTaskToStorage() {
+    const newTaskInfos = [
+      document.querySelector('[task-name]').value,
+      document.querySelector('[task-descript]').value,
+      document.querySelector('[task-priority]').value,
+      document.querySelector('[task-date]').value,
+    ]
+    const thisProjectName = UI.getCurrentProjectName()
 
-  static setTaskCompleted(taskButton) {
-    const projectName = document.getElementById('project-name').textContent;
-    const taskName = taskButton.children[0].children[1].textContent;
-
-    if (projectName === 'Today' || projectName === 'This week') {
-      const mainProjectName = taskName.split('(')[1].split(')')[0];
-      Storage.deleteTask(mainProjectName, taskName);
-    }
-    Storage.deleteTask(projectName, taskName);
-    UI.clearTasks();
-    UI.loadTasks(projectName);
+    Storage.addNewTaskToThisProject(
+      thisProjectName,
+      new Task(thisProjectName, ...newTaskInfos)
+    )
   }
-
-  static deleteTask(taskButton) {
-    const projectName = document.getElementById('project-name').textContent;
-    const taskName = taskButton.children[0].children[1].textContent;
-
-    if (projectName === 'Today' || projectName === 'This week') {
-      const mainProjectName = taskName.split('(')[1].split(')')[0];
-      Storage.deleteTask(mainProjectName, taskName);
-    }
-    Storage.deleteTask(projectName, taskName);
-    UI.clearTasks();
-    UI.loadTasks(projectName);
+  // delete
+  static initAllDeleteButtons() {
+    const buttonsDeleteTask = document.querySelectorAll('[delete-task]')
+    buttonsDeleteTask.forEach(button =>
+      button.addEventListener('click', UI.deleteThisTask)
+    )
   }
-
-  static openRenameInput(taskButton) {
-    const taskNamePara = taskButton.children[0].children[1];
-    let taskName = taskNamePara.textContent;
-    const taskNameInput = taskButton.children[0].children[2];
-    const projectName =
-      taskButton.parentNode.parentNode.children[0].textContent;
-
-    if (projectName === 'Today' || projectName === 'This week') {
-      [taskName] = taskName.split(' (');
-    }
-
-    UI.closeAllPopups();
-    taskNamePara.classList.add('active');
-    taskNameInput.classList.add('active');
-    taskNameInput.value = taskName;
+  static deleteThisTask() {
+    const taskID = this.getAttribute('delete-task')
+    document.querySelector(`[TASK${taskID}]`).outerHTML = ''
+    Storage.deleteTaskFromThisProject(UI.getCurrentProjectName(), taskID)
   }
+  // effects
+  static isPastEffect(task) {
+    const date = document.querySelector(
+      `[TASK${task.getIDForTask()}] span.date`
+    )
+    const descriptDate = document.querySelector(
+      `#_${task.getIDForTask()} .date`
+    )
 
-  static closeRenameInput(taskButton) {
-    const taskName = taskButton.children[0].children[1];
-    const taskNameInput = taskButton.children[0].children[2];
+    const d = task
+      .getDate()
+      .split('-')
+      .map(a => parseInt(a))
+    const D = new Date()
+      .toISOString()
+      .slice(0, 10)
+      .split('-')
+      .map(a => parseInt(a))
 
-    taskName.classList.remove('active');
-    taskNameInput.classList.remove('active');
-    taskNameInput.value = '';
-  }
-
-  static renameTask(e) {
-    if (e.key !== 'Enter') return;
-
-    const projectName = document.getElementById('project-name').textContent;
-    const taskName = this.previousElementSibling.textContent;
-    const newTaskName = this.value;
-
-    if (newTaskName === '') {
-      alert("Task name can't be empty");
-      return;
+    if (
+      differenceInDays(
+        new Date(d[0], d[1] - 1, d[2]),
+        new Date(D[0], D[1] - 1, D[2])
+      ) <= 3
+    ) {
+      date.style.cssText = `color:rgb(240, 173, 78${
+        task.getDone() ? ', 0.2' : ', 1'
+      });font-weight: 900;`
+      descriptDate.style.cssText = `color:rgb(240, 173, 78${
+        task.getDone() ? ', 0.2' : ', 1'
+      });font-weight: 900;`
     }
 
-    if (Storage.getTodoList().getProject(projectName).contains(newTaskName)) {
-      this.value = '';
-      alert('Task names must be different');
-      return;
+    if (isPast(new Date(d[0], d[1] - 1, d[2] + 1))) {
+      date.style.cssText = `color:rgb(255, 0, 0${
+        task.getDone() ? ', 0.1' : ', 1'
+      });font-weight: 700;`
+      descriptDate.style.cssText = `color:rgb(255, 0, 0${
+        task.getDone() ? ', 0.1' : ', 1'
+      });font-weight: 700;`
     }
-
-    if (projectName === 'Today' || projectName === 'This week') {
-      const mainProjectName = taskName.split('(')[1].split(')')[0];
-      const mainTaskName = taskName.split(' ')[0];
-      Storage.renameTask(
-        projectName,
-        taskName,
-        `${newTaskName} (${mainProjectName})`,
-      );
-      Storage.renameTask(mainProjectName, mainTaskName, newTaskName);
-    } else {
-      Storage.renameTask(projectName, taskName, newTaskName);
+  }
+  static closeNavInSmallDevices() {
+    const x = window.matchMedia('(max-width: 950px)')
+    if (x.matches) document.querySelector('.openNav').click()
+  }
+  static sortSelectEffect() {
+    const dataSorts = document.querySelectorAll('[data-sort]')
+    const sortBy = document.querySelector('[sort-by]')
+    dataSorts.forEach(e =>
+      e.addEventListener('click', () => {
+        sortBy.innerText = e.innerText
+      })
+    )
+  }
+  static taskNameAlreadyExists(isEdittingTask = false, taskName) {
+    let allTasks = Storage.getTodoList().getAllTasks()
+    let newTaskName = document.querySelector('[task-name]').value
+    if (isEdittingTask) {
+      newTaskName = document.querySelector('[edit-task-name]').value
+      if (newTaskName == taskName) return false
     }
-    UI.clearTasks();
-    UI.loadTasks(projectName);
-    UI.closeRenameInput(this.parentNode.parentNode);
-  }
-
-  static openSetDateInput(taskButton) {
-    const dueDate = taskButton.children[1].children[0];
-    const dueDateInput = taskButton.children[1].children[1];
-
-    UI.closeAllPopups();
-    dueDate.classList.add('active');
-    dueDateInput.classList.add('active');
-  }
-
-  static closeSetDateInput(taskButton) {
-    const dueDate = taskButton.children[1].children[0];
-    const dueDateInput = taskButton.children[1].children[1];
-
-    dueDate.classList.remove('active');
-    dueDateInput.classList.remove('active');
-  }
-
-  static setTaskDate() {
-    const taskButton = this.parentNode.parentNode;
-    const projectName = document.getElementById('project-name').textContent;
-    const taskName = taskButton.children[0].children[1].textContent;
-    const newDueDate = format(new Date(this.value), 'dd/MM/yyyy');
-
-    if (projectName === 'Today' || projectName === 'This week') {
-      const mainProjectName = taskName.split('(')[1].split(')')[0];
-      const mainTaskName = taskName.split(' (')[0];
-      Storage.setTaskDate(projectName, taskName, newDueDate);
-      Storage.setTaskDate(mainProjectName, mainTaskName, newDueDate);
-      if (projectName === 'Today') {
-        Storage.updateTodayProject();
-      } else {
-        Storage.updateWeekProject();
-      }
-    } else {
-      Storage.setTaskDate(projectName, taskName, newDueDate);
+    if (allTasks.some(task => task.getName() == newTaskName)) {
+      alert('Task Name Already Exists')
+      return true
     }
-    UI.clearTasks();
-    UI.loadTasks(projectName);
-    UI.closeSetDateInput(taskButton);
+    return false
+  }
+  // effects END
+
+  static addOneTask(e) {
+    e.preventDefault()
+    if (!UI.taskNameAlreadyExists()) {
+      UI.saveTaskToStorage()
+      UI.addAllTasksOfThisProjectToUI()
+      UI.clearInputsOfAddTask()
+      document.querySelector('[button-cancel-add-task]').click()
+    }
+  }
+  static clearInputsOfAddTask() {
+    document.querySelector('[task-name]').value = ''
+    document.querySelector('[task-descript]').value = ''
+    document.querySelector('[task-date]').value = ''
+    document.querySelector('[task-priority]').value = 'normal'
+  }
+  static getCurrentProjectName() {
+    return document.querySelector('[project-name]').innerText
+  }
+  static clearAddProjectInput() {
+    document.querySelector('[input-project-name]').value = ''
   }
 }

@@ -1,82 +1,82 @@
-import Project from './Project';
-import Task from './Task';
-import TodoList from './TodoList';
+import TodoList from './TodoList'
+import Project from './Project'
+import Task from './Task'
 
 export default class Storage {
-  static saveTodoList(data) {
-    localStorage.setItem('todoList', JSON.stringify(data));
+  static saveTodoList(todoList) {
+    localStorage.setItem('TodoList', JSON.stringify(todoList))
   }
-
   static getTodoList() {
-    // local storage doesn't store type of data so we have to convert it
-
     const todoList = Object.assign(
       new TodoList(),
-      JSON.parse(localStorage.getItem('todoList')),
-    );
-
+      JSON.parse(localStorage.getItem('TodoList'))
+    )
     todoList.setProjects(
       todoList
         .getProjects()
-        .map((project) => Object.assign(new Project(), project)),
-    );
-
+        .map(project => Object.assign(new Project(), project))
+    )
     todoList
       .getProjects()
-      .forEach((project) =>
+      .forEach(project =>
         project.setTasks(
-          project.getTasks().map((task) => Object.assign(new Task(), task)),
-        ),
-      );
-
-    return todoList;
+          project.getTasks().map(task => Object.assign(new Task(), task))
+        )
+      )
+    return todoList
   }
-
-  static addProject(project) {
-    const todoList = Storage.getTodoList();
-    todoList.addProject(project);
-    Storage.saveTodoList(todoList);
+  static addProject(newProjectName) {
+    const todoList = this.getTodoList()
+    todoList.addProject(newProjectName)
+    this.saveTodoList(todoList)
   }
-
+  static addNewTaskToThisProject(projectName, newTask) {
+    const todoList = this.getTodoList()
+    todoList.getProject(projectName).addTask(newTask)
+    this.saveTodoList(todoList)
+  }
+  static deleteTaskFromThisProject(projectName, taskID) {
+    const todoList = this.getTodoList()
+    todoList.getProject(projectName).deleteTask(taskID)
+    this.saveTodoList(todoList)
+  }
+  static getProject(projectName) {
+    return this.getTodoList().getProject(projectName)
+  }
   static deleteProject(projectName) {
-    const todoList = Storage.getTodoList();
-    todoList.deleteProject(projectName);
-    Storage.saveTodoList(todoList);
+    const todoList = this.getTodoList()
+    todoList.deleteProject(projectName)
+    this.saveTodoList(todoList)
   }
-
-  static addTask(projectName, task) {
-    const todoList = Storage.getTodoList();
-    todoList.getProject(projectName).addTask(task);
-    Storage.saveTodoList(todoList);
+  static getTasksFromOneProject(projectName) {
+    return this.getProject(projectName).getTasks()
   }
-
-  static deleteTask(projectName, taskName) {
-    const todoList = Storage.getTodoList();
-    todoList.getProject(projectName).deleteTask(taskName);
-    Storage.saveTodoList(todoList);
+  static getDefaultTasks(defaultProject) {
+    const projects = this.getTodoList().getNonDefaultProjects()
+    let tasks = []
+    switch (defaultProject) {
+      case 'All':
+        projects.forEach(project => (tasks = tasks.concat(project.getTasks())))
+        break
+      case 'Today':
+        projects.forEach(
+          project => (tasks = tasks.concat(project.getTodayTasks()))
+        )
+        break
+      case 'This Week':
+        projects.forEach(
+          project => (tasks = tasks.concat(project.getWeekTasks()))
+        )
+        break
+    }
+    return tasks
   }
-
-  static renameTask(projectName, taskName, newTaskName) {
-    const todoList = Storage.getTodoList();
-    todoList.getProject(projectName).getTask(taskName).setName(newTaskName);
-    Storage.saveTodoList(todoList);
+  static changeProjectTaskFilter(projectName, filter) {
+    const todoList = this.getTodoList()
+    todoList.getProject(projectName).changeFilter(filter)
+    this.saveTodoList(todoList)
   }
-
-  static setTaskDate(projectName, taskName, newDueDate) {
-    const todoList = Storage.getTodoList();
-    todoList.getProject(projectName).getTask(taskName).setDate(newDueDate);
-    Storage.saveTodoList(todoList);
-  }
-
-  static updateTodayProject() {
-    const todoList = Storage.getTodoList();
-    todoList.updateTodayProject();
-    Storage.saveTodoList(todoList);
-  }
-
-  static updateWeekProject() {
-    const todoList = Storage.getTodoList();
-    todoList.updateWeekProject();
-    Storage.saveTodoList(todoList);
+  static getFilterOfProject(projectName) {
+    return this.getProject(projectName).getFilter()
   }
 }
